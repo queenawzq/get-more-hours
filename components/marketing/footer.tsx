@@ -8,7 +8,7 @@ export function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           <div>
             <div className="mb-4">
-              <Logo height={22} href="/" />
+              <Logo height={18} href="/" />
             </div>
             <p className="text-sm text-muted-foreground">
               Helping NY seniors get the home care hours they deserve.
