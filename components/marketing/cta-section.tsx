@@ -28,7 +28,7 @@ export function CtaSection() {
             <Button
               size="lg"
               variant="outline"
-              className="w-full sm:w-auto border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
+              className="w-full sm:w-auto border-white bg-white text-primary hover:bg-white/90"
             >
               Contact Us
             </Button>
