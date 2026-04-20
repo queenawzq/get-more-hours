@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isAdminEmail } from "@/lib/auth/admin";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -57,7 +58,14 @@ export async function updateSession(request: NextRequest) {
       .single();
 
     if (profile?.role !== "admin") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      if (isAdminEmail(user.email)) {
+        await supabase
+          .from("profiles")
+          .update({ role: "admin" })
+          .eq("id", user.id);
+      } else {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
     }
   }
 
