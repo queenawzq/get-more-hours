@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminEmail } from "@/lib/auth/admin";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
             data.user.email?.split("@")[0] ??
             "User",
           phone: data.user.user_metadata?.phone ?? null,
-          role: "client",
+          role: isAdminEmail(data.user.email) ? "admin" : "client",
         });
       }
 
