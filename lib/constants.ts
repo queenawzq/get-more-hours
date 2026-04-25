@@ -1,3 +1,5 @@
+import type { BillingStatus } from "@/types";
+
 // ─── Medical Conditions (18) ───
 export const MEDICAL_CONDITIONS = [
   "Alzheimer's / Dementia",
@@ -77,6 +79,37 @@ export const STATUS_MAP: Record<
   submitted: { label: "Submitted", color: "#1E40AF", bg: "#EFF6FF", border: "#93C5FD" },
   responded: { label: "Responded", color: "#7C3AED", bg: "#F5F3FF", border: "#DDD6FE" },
   complete: { label: "Complete", color: "#059669", bg: "#ECFDF5", border: "#A7F3D0" },
+};
+
+// ─── Billing Status Map ───
+export const BILLING_STATUS_MAP: Record<
+  BillingStatus,
+  { label: string; className: string }
+> = {
+  paid: {
+    label: "Paid",
+    className: "bg-emerald-50 text-emerald-600 border-emerald-200",
+  },
+  pending: {
+    label: "Pending",
+    className: "bg-amber-50 text-amber-600 border-amber-200",
+  },
+  refunded: {
+    label: "Refunded",
+    className: "bg-gray-100 text-gray-500 border-gray-200",
+  },
+  failed: {
+    label: "Failed",
+    className: "bg-red-50 text-red-600 border-red-200",
+  },
+  disputed: {
+    label: "Disputed",
+    className: "bg-orange-50 text-orange-700 border-orange-200",
+  },
+  expired: {
+    label: "Expired",
+    className: "bg-gray-100 text-gray-500 border-gray-200",
+  },
 };
 
 // ─── Pricing (in cents) ───

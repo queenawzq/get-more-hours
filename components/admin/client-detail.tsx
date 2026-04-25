@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { DocViewer } from "@/components/documents/doc-viewer";
-import { MLTC_OPTIONS, STAGE_LABELS, STATUS_MAP } from "@/lib/constants";
+import {
+  BILLING_STATUS_MAP,
+  MLTC_OPTIONS,
+  STAGE_LABELS,
+  STATUS_MAP,
+} from "@/lib/constants";
 import { ArrowLeft, Sparkles, Loader2 } from "lucide-react";
 import type { Case, IntakeData, Document, BillingRecord, CRMNote } from "@/types";
 
@@ -258,12 +263,11 @@ export function ClientDetail({
                       </span>
                       <span
                         className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
-                          b.status === "paid"
-                            ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                            : "bg-amber-50 text-amber-600 border-amber-200"
+                          BILLING_STATUS_MAP[b.status]?.className ??
+                          BILLING_STATUS_MAP.pending.className
                         }`}
                       >
-                        {b.status}
+                        {BILLING_STATUS_MAP[b.status]?.label ?? b.status}
                       </span>
                     </div>
                   </div>

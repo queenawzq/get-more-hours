@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { STAGE_LABELS } from "@/lib/constants";
+import { BILLING_STATUS_MAP, STAGE_LABELS } from "@/lib/constants";
 import type { BillingRecord } from "@/types";
 
 export default async function AdminBillingPage() {
@@ -107,14 +107,11 @@ export default async function AdminBillingPage() {
                 <td className="px-4 py-3">
                   <span
                     className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
-                      r.status === "paid"
-                        ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                        : r.status === "refunded"
-                          ? "bg-red-50 text-red-600 border-red-200"
-                          : "bg-amber-50 text-amber-600 border-amber-200"
+                      BILLING_STATUS_MAP[r.status]?.className ??
+                      BILLING_STATUS_MAP.pending.className
                     }`}
                   >
-                    {r.status}
+                    {BILLING_STATUS_MAP[r.status]?.label ?? r.status}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500">

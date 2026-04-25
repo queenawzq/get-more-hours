@@ -88,3 +88,41 @@ export async function createCheckoutSession(options: CheckoutOptions) {
 
   return session;
 }
+
+interface WhiteGloveCheckoutOptions {
+  caseId: string;
+  caseNumber: string;
+  customerEmail: string;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export async function createWhiteGloveCheckoutSession(
+  options: WhiteGloveCheckoutOptions
+) {
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    customer_email: options.customerEmail,
+    line_items: [
+      {
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: "White Glove Service",
+            description: `Dedicated advocate for ${options.caseNumber}: document submission, case manager communication, deadline tracking`,
+          },
+          unit_amount: PRICING.whiteGlove,
+        },
+        quantity: 1,
+      },
+    ],
+    success_url: options.successUrl,
+    cancel_url: options.cancelUrl,
+    metadata: {
+      caseId: options.caseId,
+      type: "white_glove_standalone",
+    },
+  });
+
+  return session;
+}

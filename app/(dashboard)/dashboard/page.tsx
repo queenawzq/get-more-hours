@@ -8,6 +8,8 @@ import { DocumentsList } from "@/components/dashboard/documents-list";
 import { CaseSummary } from "@/components/dashboard/case-summary";
 import { Timeline } from "@/components/dashboard/timeline";
 import { WhiteGloveUpsell } from "@/components/dashboard/white-glove-upsell";
+import { PaymentSuccessToast } from "@/components/dashboard/payment-success-toast";
+import { Suspense } from "react";
 import { FileText, ArrowRight } from "lucide-react";
 import type { Case, Document } from "@/types";
 
@@ -82,6 +84,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="max-w-5xl">
+      <Suspense>
+        <PaymentSuccessToast />
+      </Suspense>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Welcome back, {displayName}</h1>
         <p className="text-muted-foreground mt-0.5">
@@ -113,7 +118,9 @@ export default async function DashboardPage() {
             documents={typedDocs}
             caseCreatedAt={typedCase.created_at}
           />
-          <WhiteGloveUpsell />
+          {typedCase.tier !== "white_glove" && (
+            <WhiteGloveUpsell caseId={typedCase.id} />
+          )}
         </div>
       </div>
     </div>
