@@ -11,27 +11,32 @@ const OCR_MODEL =
   process.env.OPENROUTER_OCR_MODEL || "google/gemini-2.0-flash-001";
 
 export async function POST(req: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { documentId } = await req.json();
+
+  if (!documentId) {
+    return NextResponse.json(
+      { error: "documentId is required" },
+      { status: 400 }
+    );
+  }
+
+  const serviceClient = await createServiceClient();
+
+  await serviceClient
+    .from("documents")
+    .update({ ocr_status: "processing", ocr_error: null })
+    .eq("id", documentId);
+
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { documentId } = await req.json();
-
-    if (!documentId) {
-      return NextResponse.json(
-        { error: "documentId is required" },
-        { status: 400 }
-      );
-    }
-
-    const serviceClient = await createServiceClient();
-
     // Fetch document
     const { data: doc, error: docError } = await serviceClient
       .from("documents")
@@ -47,10 +52,7 @@ export async function POST(req: Request) {
     }
 
     if (!doc.storage_path) {
-      return NextResponse.json(
-        { error: "No file to process" },
-        { status: 400 }
-      );
+      throw new Error("No file to process");
     }
 
     // Download the file from Supabase Storage
@@ -59,11 +61,7 @@ export async function POST(req: Request) {
       .download(doc.storage_path);
 
     if (downloadError || !fileData) {
-      console.error("File download error:", downloadError);
-      return NextResponse.json(
-        { error: "Failed to download file" },
-        { status: 500 }
-      );
+      throw new Error(`Failed to download file: ${downloadError?.message || "unknown"}`);
     }
 
     // Convert to base64 for the vision model
@@ -98,16 +96,13 @@ export async function POST(req: Request) {
     const ocrText = response.choices[0]?.message?.content;
 
     if (!ocrText) {
-      return NextResponse.json(
-        { error: "OCR failed to extract text" },
-        { status: 500 }
-      );
+      throw new Error("OCR failed to extract text");
     }
 
     // Save OCR text to document
     await serviceClient
       .from("documents")
-      .update({ ocr_text: ocrText })
+      .update({ ocr_text: ocrText, ocr_status: "ready" })
       .eq("id", documentId);
 
     // Check if this upload should trigger AI generation
@@ -119,6 +114,11 @@ export async function POST(req: Request) {
       textLength: ocrText.length,
     });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : "OCR failed";
+    await serviceClient
+      .from("documents")
+      .update({ ocr_status: "failed", ocr_error: msg })
+      .eq("id", documentId);
     console.error("OCR error:", err);
     return NextResponse.json(
       { error: "OCR processing failed" },

@@ -14,6 +14,8 @@ export type BillingStatus =
   | "failed"
   | "disputed"
   | "expired";
+export type GenerationStatus = "pending" | "generating" | "ready" | "failed";
+export type OcrStatus = "pending" | "processing" | "ready" | "failed";
 export type AdlLevel = "independent" | "some_help" | "full_help";
 
 // ─── Database Models ───
@@ -75,6 +77,10 @@ export interface Document {
   ocr_text: string | null;
   content: string | null;
   version: number;
+  generation_status: GenerationStatus | null;
+  generation_error: string | null;
+  ocr_status: OcrStatus | null;
+  ocr_error: string | null;
   created_at: string;
   updated_at: string;
 }

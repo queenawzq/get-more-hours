@@ -100,6 +100,7 @@ export async function POST(req: Request) {
         format,
         storage_path: storagePath,
         version: 1,
+        ocr_status: "pending",
       })
       .select()
       .single();
