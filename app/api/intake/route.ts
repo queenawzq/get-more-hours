@@ -1,5 +1,8 @@
+import { after } from "next/server";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { intakeSchema } from "@/lib/validations";
+import { runDocumentGeneration } from "@/lib/document-generation";
 
 export async function POST(req: Request) {
   try {
@@ -12,29 +15,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json();
+    const parsed = intakeSchema.safeParse(await req.json());
 
-    // Basic validation
-    if (!body.firstName || !body.lastName || !body.mltc) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: parsed.error.issues[0].message },
         { status: 400 }
       );
     }
 
-    if (!body.currentHours || !body.currentDays || !body.requestedHours || !body.requestedDays) {
-      return NextResponse.json(
-        { error: "Hours and days are required" },
-        { status: 400 }
-      );
-    }
-
-    if (!body.changeDescription) {
-      return NextResponse.json(
-        { error: "Please describe what has changed recently" },
-        { status: 400 }
-      );
-    }
+    const body = parsed.data;
 
     // Check if user already has a case
     const { data: existingCase } = await supabase
@@ -119,24 +109,59 @@ export async function POST(req: Request) {
       .update({ name: `${body.firstName} ${body.lastName}` })
       .eq("id", user.id);
 
-    // Trigger AI document generation in the background
-    // We don't await these — they run async and the client polls for results
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const generateDoc = (documentType: string) =>
-      fetch(`${baseUrl}/api/ai/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: req.headers.get("cookie") || "",
-        },
-        body: JSON.stringify({ caseId: newCase.id, documentType }),
-      }).catch((err) => console.error(`Generation error (${documentType}):`, err));
+    // Create placeholder documents so the UI can poll for generation status.
+    const [{ data: reqDoc, error: reqErr }, { data: lomnDoc, error: lomnErr }] =
+      await Promise.all([
+        supabase
+          .from("documents")
+          .insert({
+            case_id: newCase.id,
+            name: "Request for Increase in Plan of Care",
+            type: "generated",
+            stage: 1,
+            status: "pending",
+            format: "letter",
+            version: 1,
+            generation_status: "pending",
+          })
+          .select("id")
+          .single(),
+        supabase
+          .from("documents")
+          .insert({
+            case_id: newCase.id,
+            name: "LOMN Request Template (for your Doctor)",
+            type: "generated",
+            stage: 1,
+            status: "pending",
+            format: "letter",
+            version: 1,
+            generation_status: "pending",
+          })
+          .select("id")
+          .single(),
+      ]);
 
-    // Fire and forget — generate both Stage 1 documents
-    Promise.all([
-      generateDoc("stage1_request"),
-      generateDoc("stage1_lomn"),
-    ]).catch((err) => console.error("Document generation failed:", err));
+    if (reqErr || lomnErr || !reqDoc || !lomnDoc) {
+      console.error("Placeholder document insert failed:", reqErr || lomnErr);
+      return NextResponse.json(
+        { error: "Failed to initialize documents" },
+        { status: 500 }
+      );
+    }
+
+    // Schedule generation to run after the response is sent.
+    // after() is the correct Next.js 16 primitive for post-response background work;
+    // self-referential HTTP fetches are unreliable in the same process.
+    const caseId = newCase.id;
+    const reqDocId = reqDoc.id;
+    const lomnDocId = lomnDoc.id;
+    after(async () => {
+      await Promise.all([
+        runDocumentGeneration({ caseId, documentType: "stage1_request", documentId: reqDocId }),
+        runDocumentGeneration({ caseId, documentType: "stage1_lomn", documentId: lomnDocId }),
+      ]);
+    });
 
     return NextResponse.json(
       {

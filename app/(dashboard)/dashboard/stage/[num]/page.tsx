@@ -111,7 +111,9 @@ export default async function StageDetailPage({
             </ul>
           </div>
 
-          <WhiteGloveUpsell />
+          {typedCase.tier !== "white_glove" && (
+            <WhiteGloveUpsell caseId={typedCase.id} />
+          )}
         </div>
       </div>
     </div>

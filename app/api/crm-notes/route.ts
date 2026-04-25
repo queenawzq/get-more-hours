@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { crmNoteSchema } from "@/lib/validations";
 
 export async function GET(req: Request) {
   const supabase = await createClient();
@@ -69,11 +70,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { caseId, text } = await req.json();
+  const parsed = crmNoteSchema.safeParse(await req.json());
 
-  if (!caseId || !text?.trim()) {
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "caseId and text are required" },
+      { error: parsed.error.issues[0].message },
       { status: 400 }
     );
   }
@@ -81,9 +82,9 @@ export async function POST(req: Request) {
   const { data: note, error } = await supabase
     .from("crm_notes")
     .insert({
-      case_id: caseId,
+      case_id: parsed.data.caseId,
       author_id: user.id,
-      text: text.trim(),
+      text: parsed.data.text,
     })
     .select("*, author:profiles(id, name)")
     .single();
