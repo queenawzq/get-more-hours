@@ -2,8 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DocViewer } from "@/components/documents/doc-viewer";
 import {
   BILLING_STATUS_MAP,
@@ -11,8 +18,24 @@ import {
   STAGE_LABELS,
   STATUS_MAP,
 } from "@/lib/constants";
-import { ArrowLeft, Sparkles, Loader2 } from "lucide-react";
-import type { Case, IntakeData, Document, BillingRecord, CRMNote } from "@/types";
+import { ArrowLeft, ChevronDown, Loader2, Sparkles } from "lucide-react";
+import type {
+  BillingRecord,
+  Case,
+  CRMNote,
+  Document,
+  IntakeData,
+  StageNumber,
+  StageStatus,
+} from "@/types";
+
+const STAGE_STATUS_OPTIONS: StageStatus[] = [
+  "pending",
+  "in_progress",
+  "submitted",
+  "responded",
+  "complete",
+];
 
 interface ClientDetailProps {
   caseData: Case & { profile: { name: string } };
@@ -35,10 +58,69 @@ export function ClientDetail({
   const [newNote, setNewNote] = useState("");
   const [posting, setPosting] = useState(false);
 
+  const [stageStatus, setStageStatus] = useState<StageStatus>(
+    caseData.stage_status
+  );
+  const [stageStatusSaving, setStageStatusSaving] = useState(false);
+  const [advanceOpen, setAdvanceOpen] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
+
   const mltcLabel =
     MLTC_OPTIONS.find((o) => o.value === caseData.mltc)?.label ?? caseData.mltc;
-  const sm = STATUS_MAP[caseData.stage_status] ?? STATUS_MAP.pending;
+  const sm = STATUS_MAP[stageStatus] ?? STATUS_MAP.pending;
   const conditions = (intake?.conditions as string[]) || [];
+  const canAdvance = caseData.current_stage < 3;
+  const nextStage = (caseData.current_stage + 1) as StageNumber;
+
+  async function handleChangeStageStatus(next: StageStatus) {
+    if (next === stageStatus) return;
+    const prev = stageStatus;
+    setStageStatus(next);
+    setStageStatusSaving(true);
+    try {
+      const res = await fetch(`/api/cases/${caseData.id}/stage`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stageStatus: next }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to update status");
+      }
+      toast.success("Stage status updated");
+    } catch (err) {
+      setStageStatus(prev);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update status"
+      );
+    } finally {
+      setStageStatusSaving(false);
+    }
+  }
+
+  async function handleAdvanceStage() {
+    setAdvancing(true);
+    try {
+      const res = await fetch(`/api/cases/${caseData.id}/stage`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentStage: nextStage }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to advance stage");
+      }
+      toast.success(`Advanced to Stage ${nextStage}`);
+      setAdvanceOpen(false);
+      router.refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to advance stage"
+      );
+    } finally {
+      setAdvancing(false);
+    }
+  }
 
   const handlePostNote = async () => {
     if (!newNote.trim()) return;
@@ -118,6 +200,103 @@ export function ClientDetail({
           </div>
         </div>
       </div>
+
+      {/* Case Controls */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5 px-6 shadow-sm mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[15px] font-semibold text-foreground">
+              Case Controls
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Override automated stage state when needed.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[10px] uppercase tracking-wider text-gray-400">
+                Stage Status
+              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-8 gap-1.5"
+                      disabled={stageStatusSaving}
+                    >
+                      {stageStatusSaving ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : null}
+                      {STATUS_MAP[stageStatus]?.label ?? stageStatus}
+                      <ChevronDown className="h-3 w-3 opacity-60" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="min-w-40">
+                  {STAGE_STATUS_OPTIONS.map((opt) => (
+                    <DropdownMenuItem
+                      key={opt}
+                      onClick={() => handleChangeStageStatus(opt)}
+                    >
+                      {STATUS_MAP[opt]?.label ?? opt}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            {canAdvance && (
+              <div className="flex flex-col items-end gap-0.5">
+                <span className="text-[10px] uppercase tracking-wider text-gray-400">
+                  Progress
+                </span>
+                <Button
+                  size="sm"
+                  className="text-xs h-8"
+                  onClick={() => setAdvanceOpen(true)}
+                >
+                  Advance to Stage {nextStage}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {advanceOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5">
+            <h3 className="text-base font-semibold text-foreground mb-1.5">
+              Advance to Stage {nextStage}?
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              This will move the case forward. The client will see the new
+              stage immediately.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAdvanceOpen(false)}
+                disabled={advancing}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleAdvanceStage}
+                disabled={advancing}
+              >
+                {advancing && (
+                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                )}
+                Confirm
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
         {/* Left column */}
