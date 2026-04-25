@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isAdminEmail } from "@/lib/auth/admin";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -42,12 +43,11 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/admin") ||
     pathname.startsWith("/intake");
 
-  // Prototype mode: skip auth redirect so demo works without real accounts
-  // if (isProtectedRoute && !user) {
-  //   const loginUrl = new URL("/login", request.url);
-  //   loginUrl.searchParams.set("callbackUrl", pathname);
-  //   return NextResponse.redirect(loginUrl);
-  // }
+  if (isProtectedRoute && !user) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
 
   // Admin routes - check role
   if (pathname.startsWith("/admin") && user) {
@@ -58,7 +58,14 @@ export async function updateSession(request: NextRequest) {
       .single();
 
     if (profile?.role !== "admin") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      if (isAdminEmail(user.email)) {
+        await supabase
+          .from("profiles")
+          .update({ role: "admin" })
+          .eq("id", user.id);
+      } else {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
     }
   }
 
