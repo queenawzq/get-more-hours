@@ -1,19 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DocViewer } from "@/components/documents/doc-viewer";
 import type { Document } from "@/types";
 import type { StageDocConfig } from "@/lib/stage-config";
-import { Lock, FileText } from "lucide-react";
+import { Lock, FileText, Loader2, AlertCircle } from "lucide-react";
 
 interface StageAiDocsProps {
   docConfigs: StageDocConfig[];
   documents: Document[];
 }
 
-function StatusBadge({ status }: { status: string }) {
-  if (status === "review_needed") {
+function isGenerating(doc: Document): boolean {
+  return (
+    doc.generation_status === "pending" ||
+    doc.generation_status === "generating"
+  );
+}
+
+function StatusBadge({ doc }: { doc: Document }) {
+  if (isGenerating(doc)) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-600 border border-amber-200">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Generating...
+      </span>
+    );
+  }
+  if (doc.generation_status === "failed") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-600 border border-red-200">
+        <AlertCircle className="h-3 w-3" />
+        Failed
+      </span>
+    );
+  }
+  if (doc.status === "review_needed") {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-600 border border-amber-200">
         <span className="w-[5px] h-[5px] rounded-full bg-amber-600" />
@@ -21,7 +45,7 @@ function StatusBadge({ status }: { status: string }) {
       </span>
     );
   }
-  if (status === "ready" || status === "reviewed") {
+  if (doc.status === "ready" || doc.status === "reviewed") {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200">
         <span className="w-[5px] h-[5px] rounded-full bg-emerald-600" />
@@ -33,8 +57,21 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function StageAiDocs({ docConfigs, documents }: StageAiDocsProps) {
+  const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [viewingDoc, setViewingDoc] = useState<Document | null>(null);
+
+  const anyGenerating = documents.some(
+    (d) => d.type === "generated" && isGenerating(d)
+  );
+
+  useEffect(() => {
+    if (!anyGenerating) return;
+    const interval = setInterval(() => {
+      router.refresh();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [anyGenerating, router]);
 
   if (viewingDoc) {
     return (
@@ -55,6 +92,8 @@ export function StageAiDocs({ docConfigs, documents }: StageAiDocsProps) {
         );
         const isLocked = cfg.locked && !doc;
         const isExpanded = expandedId === cfg.id;
+        const generating = doc ? isGenerating(doc) : false;
+        const failed = doc?.generation_status === "failed";
 
         return (
           <div
@@ -67,11 +106,21 @@ export function StageAiDocs({ docConfigs, documents }: StageAiDocsProps) {
               <div className="flex items-center gap-2.5">
                 <div
                   className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center ${
-                    isLocked ? "bg-gray-100" : "bg-blue-50"
+                    isLocked
+                      ? "bg-gray-100"
+                      : generating
+                        ? "bg-amber-50"
+                        : failed
+                          ? "bg-red-50"
+                          : "bg-blue-50"
                   }`}
                 >
                   {isLocked ? (
                     <Lock className="h-4 w-4 text-gray-400" />
+                  ) : generating ? (
+                    <Loader2 className="h-4 w-4 text-amber-600 animate-spin" />
+                  ) : failed ? (
+                    <AlertCircle className="h-4 w-4 text-red-600" />
                   ) : (
                     <FileText className="h-4 w-4 text-primary" />
                   )}
@@ -83,37 +132,48 @@ export function StageAiDocs({ docConfigs, documents }: StageAiDocsProps) {
                   <div className="text-[11px] text-gray-400 mt-0.5">
                     {isLocked
                       ? "Will be generated when requirements are met"
-                      : doc?.status === "review_needed"
-                        ? "Review needed"
-                        : "Ready"}
+                      : generating
+                        ? "Generating your letter — this usually takes 10–30 seconds"
+                        : failed
+                          ? "Generation failed — open to retry"
+                          : doc?.status === "review_needed"
+                            ? "Review needed"
+                            : "Ready"}
                   </div>
                 </div>
               </div>
               <div className="flex gap-1.5 items-center">
-                {doc && <StatusBadge status={doc.status} />}
-                {!isLocked && doc && (
+                {doc && <StatusBadge doc={doc} />}
+                {!isLocked && doc && !generating && (
                   <Button
                     variant="outline"
                     size="sm"
                     className="text-xs h-7"
                     onClick={() =>
-                      setExpandedId(isExpanded ? null : cfg.id)
+                      failed
+                        ? setViewingDoc(doc)
+                        : setExpandedId(isExpanded ? null : cfg.id)
                     }
                   >
-                    {isExpanded ? "Collapse" : "Preview"}
+                    {failed ? "Open" : isExpanded ? "Collapse" : "Preview"}
                   </Button>
                 )}
               </div>
             </div>
 
             {/* Expanded preview */}
-            {isExpanded && doc && (
+            {isExpanded && doc && !generating && !failed && (
               <div className="px-5 pb-4 pt-0 bg-gray-50 border-t border-gray-100">
                 <p className="text-sm text-foreground leading-relaxed mt-3 line-clamp-4 font-serif">
                   {doc.content?.substring(0, 300)}...
                 </p>
                 <div className="mt-3 flex gap-2">
-                  <Button variant="outline" size="sm" className="text-xs">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setViewingDoc(doc)}
+                  >
                     Download
                   </Button>
                   {doc.status === "review_needed" && (

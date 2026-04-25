@@ -108,7 +108,11 @@ export default async function DashboardPage() {
             documents={typedDocs}
             currentStage={typedCase.current_stage}
           />
-          <DocumentsList documents={typedDocs} />
+          <DocumentsList
+            documents={typedDocs}
+            caseId={typedCase.id}
+            currentStage={typedCase.current_stage}
+          />
         </div>
 
         {/* Right sidebar */}

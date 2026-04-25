@@ -1,6 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DocViewer } from "@/components/documents/doc-viewer";
+import { toast } from "sonner";
 import type { Document } from "@/types";
 
 interface Task {
@@ -9,13 +14,21 @@ interface Task {
   action: string;
   done: boolean;
   priority: boolean;
-  docId?: string;
+  pending: boolean;
+  doc?: Document;
 }
 
 interface NextStepsProps {
   documents: Document[];
   currentStage: number;
-  onViewDoc?: (docId: string) => void;
+}
+
+function isGenerating(doc: Document | undefined): boolean {
+  if (!doc) return false;
+  return (
+    doc.generation_status === "pending" ||
+    doc.generation_status === "generating"
+  );
 }
 
 function deriveTasks(documents: Document[], currentStage: number): Task[] {
@@ -47,7 +60,8 @@ function deriveTasks(documents: Document[], currentStage: number): Task[] {
       action: "Review Letter",
       done: requestLetter?.status === "reviewed" || requestLetter?.status === "ready",
       priority: requestLetter?.status === "review_needed",
-      docId: requestLetter?.id,
+      pending: isGenerating(requestLetter),
+      doc: requestLetter,
     });
 
     tasks.push({
@@ -55,8 +69,9 @@ function deriveTasks(documents: Document[], currentStage: number): Task[] {
       text: "Send the LOMN request template to your doctor",
       action: "View Template",
       done: !!uploadedLomn,
-      priority: !uploadedLomn && !!lomnTemplate,
-      docId: lomnTemplate?.id,
+      priority: !uploadedLomn && !!lomnTemplate && !isGenerating(lomnTemplate),
+      pending: isGenerating(lomnTemplate),
+      doc: lomnTemplate,
     });
 
     tasks.push({
@@ -65,6 +80,7 @@ function deriveTasks(documents: Document[], currentStage: number): Task[] {
       action: "Upload",
       done: !!uploadedLomn,
       priority: false,
+      pending: false,
     });
 
     tasks.push({
@@ -73,18 +89,33 @@ function deriveTasks(documents: Document[], currentStage: number): Task[] {
       action: "View Guide",
       done: false,
       priority: false,
+      pending: false,
     });
   }
 
   return tasks;
 }
 
-export function NextSteps({
-  documents,
-  currentStage,
-}: NextStepsProps) {
+export function NextSteps({ documents, currentStage }: NextStepsProps) {
+  const router = useRouter();
+  const [viewingDoc, setViewingDoc] = useState<Document | null>(null);
   const tasks = deriveTasks(documents, currentStage);
   const remaining = tasks.filter((t) => !t.done).length;
+  const anyGenerating = documents.some(isGenerating);
+
+  useEffect(() => {
+    if (!anyGenerating) return;
+    const interval = setInterval(() => {
+      router.refresh();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [anyGenerating, router]);
+
+  if (viewingDoc) {
+    return (
+      <DocViewer document={viewingDoc} onClose={() => setViewingDoc(null)} />
+    );
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5 px-6 shadow-sm mb-4">
@@ -103,16 +134,20 @@ export function NextSteps({
             className={`flex items-center gap-2.5 p-2.5 px-3 rounded-lg border ${
               t.done
                 ? "bg-gray-50 border-gray-200 opacity-55"
-                : t.priority
-                  ? "bg-blue-50 border-blue-100"
-                  : "bg-white border-gray-200"
+                : t.pending
+                  ? "bg-gray-50 border-gray-200 opacity-75"
+                  : t.priority
+                    ? "bg-blue-50 border-blue-100"
+                    : "bg-white border-gray-200"
             }`}
           >
             <div
               className={`w-5 h-5 rounded-full shrink-0 border-2 flex items-center justify-center ${
                 t.done
                   ? "border-emerald-600 bg-emerald-600"
-                  : "border-gray-300 bg-transparent"
+                  : t.pending
+                    ? "border-transparent"
+                    : "border-gray-300 bg-transparent"
               }`}
             >
               {t.done && (
@@ -131,25 +166,46 @@ export function NextSteps({
                   />
                 </svg>
               )}
+              {t.pending && (
+                <Loader2 className="h-3.5 w-3.5 text-amber-500 animate-spin" />
+              )}
             </div>
             <span
               className={`flex-1 text-sm ${
                 t.done
                   ? "text-gray-400 line-through"
-                  : t.priority
-                    ? "text-foreground font-medium"
-                    : "text-foreground"
+                  : t.pending
+                    ? "text-gray-500"
+                    : t.priority
+                      ? "text-foreground font-medium"
+                      : "text-foreground"
               }`}
             >
               {t.text}
-              {t.priority && !t.done && (
+              {t.pending && (
+                <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 align-middle">
+                  GENERATING
+                </span>
+              )}
+              {t.priority && !t.done && !t.pending && (
                 <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500 text-white align-middle">
                   ACTION NEEDED
                 </span>
               )}
             </span>
-            {!t.done && (
-              <Button variant="outline" size="sm" className="text-xs h-7">
+            {!t.done && !t.pending && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-7"
+                onClick={() => {
+                  if (t.doc) {
+                    setViewingDoc(t.doc);
+                  } else {
+                    toast.info("Document not ready yet — check back shortly.");
+                  }
+                }}
+              >
                 {t.action}
               </Button>
             )}
