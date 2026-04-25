@@ -2,14 +2,20 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
+import type { BillingStatus } from "@/types";
 
 interface BillingClientProps {
   caseId: string;
   stage: number;
+  latestStatus?: BillingStatus | null;
 }
 
-export function BillingClient({ caseId, stage }: BillingClientProps) {
+export function BillingClient({
+  caseId,
+  stage,
+  latestStatus,
+}: BillingClientProps) {
   const [loading, setLoading] = useState(false);
 
   const handleCheckout = async (includeWhiteGlove: boolean = false) => {
@@ -32,8 +38,16 @@ export function BillingClient({ caseId, stage }: BillingClientProps) {
     }
   };
 
+  const failed = latestStatus === "failed";
+
   return (
     <div className="flex flex-col gap-1.5">
+      {failed && (
+        <div className="flex items-start gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>Payment failed — please try again.</span>
+        </div>
+      )}
       <Button
         size="sm"
         className="w-full text-xs"
@@ -41,7 +55,7 @@ export function BillingClient({ caseId, stage }: BillingClientProps) {
         disabled={loading}
       >
         {loading && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
-        Pay Now
+        {failed ? "Retry payment" : "Pay Now"}
       </Button>
     </div>
   );

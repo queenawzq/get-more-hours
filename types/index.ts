@@ -7,7 +7,13 @@ export type DocumentType = "generated" | "uploaded";
 export type DocumentStatus = "pending" | "ready" | "review_needed" | "uploaded" | "reviewed";
 export type DocumentFormat = "letter" | "pdf" | "image";
 export type BillingType = "stage_fee" | "white_glove";
-export type BillingStatus = "pending" | "paid" | "refunded";
+export type BillingStatus =
+  | "pending"
+  | "paid"
+  | "refunded"
+  | "failed"
+  | "disputed"
+  | "expired";
 export type AdlLevel = "independent" | "some_help" | "full_help";
 
 // ─── Database Models ───
@@ -101,7 +107,9 @@ export interface BillingRecord {
   type: BillingType;
   stripe_payment_id: string | null;
   status: BillingStatus;
+  stripe_event: Record<string, unknown> | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface CRMNote {

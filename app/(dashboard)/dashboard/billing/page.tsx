@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getRequiredUser } from "@/lib/supabase/server";
-import { STAGE_LABELS, PRICING } from "@/lib/constants";
+import { BILLING_STATUS_MAP, STAGE_LABELS, PRICING } from "@/lib/constants";
 import { BillingClient } from "@/components/dashboard/billing-client";
 import type { Case, BillingRecord } from "@/types";
 
@@ -44,9 +44,11 @@ export default async function BillingPage() {
       {/* Pricing cards */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         {stages.map((s) => {
-          const paid = records.some(
-            (r) => r.stage === s.num && r.type === "stage_fee" && r.status === "paid"
+          const stageRecords = records.filter(
+            (r) => r.stage === s.num && r.type === "stage_fee"
           );
+          const paid = stageRecords.some((r) => r.status === "paid");
+          const latest = stageRecords[stageRecords.length - 1];
           const isCurrent = typedCase.current_stage === s.num;
 
           return (
@@ -66,11 +68,17 @@ export default async function BillingPage() {
                 ${(s.price / 100).toFixed(0)}
               </div>
               {paid ? (
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200">
-                  Paid
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold border ${BILLING_STATUS_MAP.paid.className}`}
+                >
+                  {BILLING_STATUS_MAP.paid.label}
                 </span>
               ) : isCurrent ? (
-                <BillingClient caseId={typedCase.id} stage={s.num} />
+                <BillingClient
+                  caseId={typedCase.id}
+                  stage={s.num}
+                  latestStatus={latest?.status ?? null}
+                />
               ) : (
                 <span className="text-xs text-gray-400">Not yet available</span>
               )}
@@ -130,12 +138,11 @@ export default async function BillingPage() {
                   </span>
                   <span
                     className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
-                      r.status === "paid"
-                        ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                        : "bg-amber-50 text-amber-600 border-amber-200"
+                      BILLING_STATUS_MAP[r.status]?.className ??
+                      BILLING_STATUS_MAP.pending.className
                     }`}
                   >
-                    {r.status}
+                    {BILLING_STATUS_MAP[r.status]?.label ?? r.status}
                   </span>
                 </div>
               </div>
