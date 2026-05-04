@@ -7,6 +7,7 @@ import {
   runDocumentGeneration,
   type DocumentType,
 } from "@/lib/document-generation";
+import { checkStagePaid } from "@/lib/billing/guard";
 
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -152,11 +153,14 @@ async function checkAndTriggerGeneration(
     );
   };
 
-  // IAD uploaded → generate Stage 2 appeal + advance case
+  // IAD uploaded → advance to Stage 2 + generate appeal, only if Stage 2 paid.
   if (
     docName.includes("initial adverse") ||
     docName.includes("iad")
   ) {
+    const gate = await checkStagePaid(serviceClient, caseId, 2);
+    if (!gate.ok) return;
+
     await serviceClient
       .from("cases")
       .update({ current_stage: 2, stage_status: "in_progress" })
@@ -165,11 +169,14 @@ async function checkAndTriggerGeneration(
     await triggerGeneration("stage2_appeal");
   }
 
-  // FAD uploaded → generate Stage 3 hearing request + advance case
+  // FAD uploaded → advance to Stage 3 + generate hearing request, only if Stage 3 paid.
   if (
     docName.includes("final adverse") ||
     docName.includes("fad")
   ) {
+    const gate = await checkStagePaid(serviceClient, caseId, 3);
+    if (!gate.ok) return;
+
     await serviceClient
       .from("cases")
       .update({ current_stage: 3, stage_status: "in_progress" })
@@ -178,7 +185,7 @@ async function checkAndTriggerGeneration(
     await triggerGeneration("stage3_hearing");
   }
 
-  // UAS uploaded → generate Memo of Law (only if already at Stage 3)
+  // UAS uploaded → generate Memo of Law (only if already at Stage 3, which implies paid).
   if (docName.includes("uas") || docName.includes("evidence package")) {
     const { data: caseData } = await serviceClient
       .from("cases")
@@ -187,6 +194,8 @@ async function checkAndTriggerGeneration(
       .single();
 
     if (caseData?.current_stage === 3) {
+      const gate = await checkStagePaid(serviceClient, caseId, 3);
+      if (!gate.ok) return;
       await triggerGeneration("stage3_memo");
     }
   }

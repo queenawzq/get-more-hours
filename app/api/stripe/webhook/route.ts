@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PRICING } from "@/lib/constants";
+import { runDocumentGeneration, type DocumentType } from "@/lib/document-generation";
 import type Stripe from "stripe";
 
 export async function POST(req: Request) {
@@ -104,6 +105,9 @@ export async function POST(req: Request) {
         });
       }
 
+      // Schedule generation for any pending placeholder documents at this stage.
+      after(() => triggerStageGeneration(caseId, stageNum));
+
       // Handle White Glove add-on bundled with stage fee.
       if (includeWhiteGlove === "true") {
         await serviceClient.from("billing").insert({
@@ -178,4 +182,42 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+const NAME_TO_TYPE: Record<string, DocumentType> = {
+  "Request for Increase in Plan of Care": "stage1_request",
+  "LOMN Request Template (for your Doctor)": "stage1_lomn",
+  "Internal Appeal Letter": "stage2_appeal",
+  "Fair Hearing Request": "stage3_hearing",
+  "Memo of Law": "stage3_memo",
+};
+
+// Looks up placeholder documents at the given (case, stage) whose generation
+// hasn't completed yet, and runs generation for any whose name matches a known
+// document type. Stage 1 placeholders are created at intake; Stage 2/3 are
+// usually created by the OCR auto-detect flow — this catches both paths.
+async function triggerStageGeneration(caseId: string, stage: number) {
+  const client = await createServiceClient();
+  const { data: docs, error } = await client
+    .from("documents")
+    .select("id, name, generation_status")
+    .eq("case_id", caseId)
+    .eq("stage", stage)
+    .eq("type", "generated")
+    .neq("generation_status", "ready");
+
+  if (error) {
+    console.error("triggerStageGeneration: lookup failed", error);
+    return;
+  }
+
+  const jobs: Promise<void>[] = [];
+  for (const d of docs || []) {
+    const documentType = NAME_TO_TYPE[d.name as string];
+    if (!documentType) continue;
+    jobs.push(
+      runDocumentGeneration({ caseId, documentType, documentId: d.id as string })
+    );
+  }
+  await Promise.all(jobs);
 }
