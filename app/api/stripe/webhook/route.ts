@@ -2,7 +2,11 @@ import { after, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PRICING } from "@/lib/constants";
-import { runDocumentGeneration, type DocumentType } from "@/lib/document-generation";
+import {
+  NAME_MAP,
+  runDocumentGeneration,
+  type DocumentType,
+} from "@/lib/document-generation";
 import type Stripe from "stripe";
 
 export async function POST(req: Request) {
@@ -34,6 +38,23 @@ export async function POST(req: Request) {
 
   const serviceClient = await createServiceClient();
   const rawEvent = event as unknown as Record<string, unknown>;
+
+  // Idempotency: claim this event.id before any side effects. A duplicate
+  // delivery hits the primary-key constraint (Postgres SQLSTATE 23505) and
+  // we return 200 so Stripe stops retrying.
+  const { error: dedupErr } = await serviceClient
+    .from("stripe_events")
+    .insert({ event_id: event.id, type: event.type });
+  if (dedupErr) {
+    if (dedupErr.code === "23505") {
+      return NextResponse.json({ received: true, deduplicated: true });
+    }
+    console.error("stripe_events insert failed:", dedupErr);
+    return NextResponse.json(
+      { error: "event log failed" },
+      { status: 500 }
+    );
+  }
 
   switch (event.type) {
     case "checkout.session.completed": {
@@ -77,7 +98,7 @@ export async function POST(req: Request) {
         .eq("case_id", caseId)
         .eq("stage", stageNum)
         .eq("type", "stage_fee")
-        .single();
+        .maybeSingle();
 
       if (existingBilling) {
         await serviceClient
@@ -184,13 +205,9 @@ export async function POST(req: Request) {
   return NextResponse.json({ received: true });
 }
 
-const NAME_TO_TYPE: Record<string, DocumentType> = {
-  "Request for Increase in Plan of Care": "stage1_request",
-  "LOMN Request Template (for your Doctor)": "stage1_lomn",
-  "Internal Appeal Letter": "stage2_appeal",
-  "Fair Hearing Request": "stage3_hearing",
-  "Memo of Law": "stage3_memo",
-};
+const NAME_TO_TYPE: Record<string, DocumentType> = Object.fromEntries(
+  Object.entries(NAME_MAP).map(([type, name]) => [name, type as DocumentType])
+);
 
 // Looks up placeholder documents at the given (case, stage) whose generation
 // hasn't completed yet, and runs generation for any whose name matches a known
@@ -219,5 +236,7 @@ async function triggerStageGeneration(caseId: string, stage: number) {
       runDocumentGeneration({ caseId, documentType, documentId: d.id as string })
     );
   }
-  await Promise.all(jobs);
+  // allSettled so one failed generation doesn't drop sibling generations;
+  // runDocumentGeneration records failed status internally on throw.
+  await Promise.allSettled(jobs);
 }
