@@ -25,6 +25,9 @@ export default async function BillingPage() {
 
   const typedCase = caseData as Case;
   const records = (billing || []) as BillingRecord[];
+  // White Glove bypasses every per-stage gate (lib/billing/guard.ts), so a
+  // white-glove case has nothing to pay — no "Pay Now", no upsell.
+  const isWhiteGlove = typedCase.tier === "white_glove";
 
   const stages = [
     { num: 1, label: STAGE_LABELS[1], price: PRICING.stage1 },
@@ -73,6 +76,10 @@ export default async function BillingPage() {
                 >
                   {BILLING_STATUS_MAP.paid.label}
                 </span>
+              ) : isWhiteGlove ? (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-600">
+                  Included · White Glove
+                </span>
               ) : isCurrent ? (
                 <BillingClient
                   caseId={typedCase.id}
@@ -88,22 +95,24 @@ export default async function BillingPage() {
       </div>
 
       {/* White Glove add-on */}
-      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-5 mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-bold text-foreground mb-1">
-              White Glove Service
+      {!isWhiteGlove && (
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-5 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-bold text-foreground mb-1">
+                White Glove Service
+              </div>
+              <p className="text-xs text-gray-500 max-w-md">
+                Add dedicated advocate support to any stage — we handle
+                submissions, communications, and deadline tracking.
+              </p>
             </div>
-            <p className="text-xs text-gray-500 max-w-md">
-              Add dedicated advocate support to any stage — we handle
-              submissions, communications, and deadline tracking.
-            </p>
-          </div>
-          <div className="text-xl font-bold text-purple-600">
-            +${(PRICING.whiteGlove / 100).toFixed(0)}/stage
+            <div className="text-xl font-bold text-purple-600">
+              +${(PRICING.whiteGlove / 100).toFixed(0)}/stage
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Payment history */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 px-6 shadow-sm">
