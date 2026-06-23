@@ -16,7 +16,7 @@ const openai = new OpenAI({
 });
 
 const OCR_MODEL =
-  process.env.OPENROUTER_OCR_MODEL || "google/gemini-2.0-flash-001";
+  process.env.OPENROUTER_OCR_MODEL || "google/gemini-3.1-flash-lite";
 
 export async function POST(req: Request) {
   const supabase = await createClient();

@@ -90,6 +90,15 @@ export const stageUpdateSchema = z
     { message: "Provide currentStage or stageStatus" }
   );
 
+export const compSchema = z.object({
+  stage: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  action: z.enum(["comp", "uncomp"]),
+});
+
+export const tierSchema = z.object({
+  tier: z.enum(["self_serve", "white_glove"]),
+});
+
 export const commentSchema = z.object({
   text: z.string().trim().min(1, "Comment cannot be empty").max(5000),
 });

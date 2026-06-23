@@ -18,7 +18,7 @@ import {
   STAGE_LABELS,
   STATUS_MAP,
 } from "@/lib/constants";
-import { ArrowLeft, ChevronDown, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, ChevronDown, KeyRound, Loader2, Sparkles } from "lucide-react";
 import type {
   BillingRecord,
   Case,
@@ -64,6 +64,10 @@ export function ClientDetail({
   const [stageStatusSaving, setStageStatusSaving] = useState(false);
   const [advanceOpen, setAdvanceOpen] = useState(false);
   const [advancing, setAdvancing] = useState(false);
+  const [tier, setTier] = useState(caseData.tier);
+  const [tierSaving, setTierSaving] = useState(false);
+  const [compingStage, setCompingStage] = useState<number | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const mltcLabel =
     MLTC_OPTIONS.find((o) => o.value === caseData.mltc)?.label ?? caseData.mltc;
@@ -119,6 +123,78 @@ export function ClientDetail({
       );
     } finally {
       setAdvancing(false);
+    }
+  }
+
+  async function handleToggleTier() {
+    const next = tier === "white_glove" ? "self_serve" : "white_glove";
+    const prev = tier;
+    setTier(next);
+    setTierSaving(true);
+    try {
+      const res = await fetch(`/api/cases/${caseData.id}/tier`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: next }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to update tier");
+      }
+      toast.success(
+        next === "white_glove" ? "White Glove granted" : "White Glove removed"
+      );
+      router.refresh();
+    } catch (err) {
+      setTier(prev);
+      toast.error(err instanceof Error ? err.message : "Failed to update tier");
+    } finally {
+      setTierSaving(false);
+    }
+  }
+
+  async function handleComp(stage: number, action: "comp" | "uncomp") {
+    setCompingStage(stage);
+    try {
+      const res = await fetch(`/api/cases/${caseData.id}/comp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage, action }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to update billing");
+      }
+      toast.success(
+        action === "comp"
+          ? `Stage ${stage} comped (marked paid)`
+          : `Stage ${stage} comp removed`
+      );
+      router.refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update billing"
+      );
+    } finally {
+      setCompingStage(null);
+    }
+  }
+
+  async function handleResetPassword() {
+    setResetting(true);
+    try {
+      const res = await fetch(`/api/cases/${caseData.id}/reset-password`, {
+        method: "POST",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Failed to send reset email");
+      toast.success(`Password reset email sent to ${body.email}`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to send reset email"
+      );
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -261,6 +337,36 @@ export function ClientDetail({
               </div>
             )}
           </div>
+        </div>
+        <div className="mt-4 pt-4 border-t flex flex-wrap items-center gap-2">
+          <Button
+            variant={tier === "white_glove" ? "outline" : "default"}
+            size="sm"
+            className="text-xs h-8 gap-1.5"
+            onClick={handleToggleTier}
+            disabled={tierSaving}
+          >
+            {tierSaving ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Sparkles className="h-3 w-3" />
+            )}
+            {tier === "white_glove" ? "Remove White Glove" : "Grant White Glove"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs h-8 gap-1.5"
+            onClick={handleResetPassword}
+            disabled={resetting}
+          >
+            {resetting ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <KeyRound className="h-3 w-3" />
+            )}
+            Send Password Reset
+          </Button>
         </div>
       </div>
 
@@ -453,6 +559,46 @@ export function ClientDetail({
                 ))}
               </div>
             )}
+            <div className="mt-3 pt-3 border-t">
+              <span className="text-[10px] uppercase tracking-wider text-gray-400">
+                Comp / Unlock Stages
+              </span>
+              <div className="flex flex-wrap gap-2 mt-1.5">
+                {([1, 2, 3] as const).map((s) => {
+                  const fee = billing.find(
+                    (b) => b.stage === s && b.type === "stage_fee"
+                  );
+                  const paid = fee?.status === "paid";
+                  const isComp = paid && !fee?.stripe_payment_id;
+                  const busy = compingStage === s;
+                  return (
+                    <Button
+                      key={s}
+                      variant={paid ? "outline" : "default"}
+                      size="sm"
+                      className="text-xs h-7"
+                      disabled={
+                        busy || tier === "white_glove" || (paid && !isComp)
+                      }
+                      onClick={() => handleComp(s, isComp ? "uncomp" : "comp")}
+                    >
+                      {busy && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
+                      {paid
+                        ? isComp
+                          ? `Stage ${s}: Remove comp`
+                          : `Stage ${s}: Paid`
+                        : `Comp Stage ${s}`}
+                    </Button>
+                  );
+                })}
+              </div>
+              {tier === "white_glove" && (
+                <p className="text-[11px] text-purple-600 mt-1.5">
+                  White Glove bypasses all stage gates — per-stage comps
+                  aren&apos;t needed.
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
