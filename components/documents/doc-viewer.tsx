@@ -246,13 +246,13 @@ export function DocViewer({
           <StatusBadge status={derived} />
         </div>
         <div className="flex items-center gap-2">
-          {isAdmin && doc.status !== "reviewed" && derived !== "generating" && derived !== "failed" && (
+          {derived === "review_needed" && (
             <Button
               size="sm"
               onClick={handleMarkReviewed}
               className="bg-emerald-600 hover:bg-emerald-700"
             >
-              Mark Reviewed
+              Approve
             </Button>
           )}
           <Button
@@ -310,7 +310,8 @@ export function DocViewer({
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm font-medium">Generating your document...</p>
               <p className="text-xs text-gray-400">
-                This usually takes 10–30 seconds.
+                This usually takes 10–30 seconds — up to a minute for the Memo
+                of Law. This page updates automatically.
               </p>
             </div>
           </div>

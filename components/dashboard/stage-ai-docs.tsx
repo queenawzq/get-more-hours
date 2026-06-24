@@ -133,7 +133,7 @@ export function StageAiDocs({ docConfigs, documents }: StageAiDocsProps) {
                     {isLocked
                       ? "Will be generated when requirements are met"
                       : generating
-                        ? "Generating your letter — this usually takes 10–30 seconds"
+                        ? `Generating ${cfg.name} — usually 10–30 seconds${cfg.name.includes("Memo") ? ", up to a minute" : ""}`
                         : failed
                           ? "Generation failed — open to retry"
                           : doc?.status === "review_needed"

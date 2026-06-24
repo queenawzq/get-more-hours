@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checkStagePaid } from "@/lib/billing/guard";
 
@@ -126,16 +126,26 @@ export async function POST(req: Request) {
       note: `Uploaded ${file.name}`,
     });
 
-    // Trigger OCR in the background for PDFs and images
+    // Trigger OCR in the background for PDFs and images. Wrapped in after() so
+    // the runtime keeps the function alive until the OCR request is delivered —
+    // a bare un-awaited fetch can be dropped when the response returns (notably
+    // on serverless), leaving ocr_status stuck at 'pending'.
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    fetch(`${baseUrl}/api/ai/ocr`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: req.headers.get("cookie") || "",
-      },
-      body: JSON.stringify({ documentId: doc.id }),
-    }).catch((err) => console.error("OCR trigger error:", err));
+    const cookie = req.headers.get("cookie") || "";
+    after(async () => {
+      try {
+        await fetch(`${baseUrl}/api/ai/ocr`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookie,
+          },
+          body: JSON.stringify({ documentId: doc.id }),
+        });
+      } catch (err) {
+        console.error("OCR trigger error:", err);
+      }
+    });
 
     return NextResponse.json(
       {
