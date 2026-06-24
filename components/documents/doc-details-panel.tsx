@@ -16,7 +16,66 @@ interface DocDetailsPanelProps {
 
 type Tab = "details" | "comments" | "history";
 
-function DetailsTab({ document }: { document: Document }) {
+function OcrStatusNote({
+  document,
+  isAdmin,
+}: {
+  document: Document;
+  isAdmin?: boolean;
+}) {
+  if (document.ocr_status === "ready" || document.ocr_text) {
+    return (
+      <div className="mt-4 p-2.5 px-3 rounded-lg bg-emerald-50 border border-emerald-200">
+        <div className="text-xs font-semibold text-emerald-600">
+          Processing complete
+        </div>
+        <div className="text-xs text-foreground mt-0.5">
+          Text extracted and available for AI analysis.
+        </div>
+      </div>
+    );
+  }
+
+  if (document.ocr_status === "failed") {
+    return (
+      <div className="mt-4 p-2.5 px-3 rounded-lg bg-amber-50 border border-amber-200">
+        <div className="text-xs font-semibold text-amber-700">
+          Couldn&apos;t process this document
+        </div>
+        <div className="text-xs text-foreground mt-0.5">
+          We had trouble reading this file. Please try re-uploading it, or
+          contact support if it keeps happening.
+        </div>
+        {isAdmin && document.ocr_error && (
+          <div className="text-[11px] text-gray-400 mt-1 break-words">
+            Staff detail: {document.ocr_error}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (document.ocr_status === "pending" || document.ocr_status === "processing") {
+    return (
+      <div className="mt-4 p-2.5 px-3 rounded-lg bg-blue-50 border border-blue-200 flex items-center gap-2">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+        <div className="text-xs text-foreground">
+          Processing document — extracting text…
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function DetailsTab({
+  document,
+  isAdmin,
+}: {
+  document: Document;
+  isAdmin?: boolean;
+}) {
   const rows = [
     {
       label: "Type",
@@ -50,15 +109,8 @@ function DetailsTab({ document }: { document: Document }) {
         </div>
       ))}
 
-      {document.type === "uploaded" && document.ocr_text && (
-        <div className="mt-4 p-2.5 px-3 rounded-lg bg-emerald-50 border border-emerald-200">
-          <div className="text-xs font-semibold text-emerald-600">
-            OCR Processing Complete
-          </div>
-          <div className="text-xs text-foreground mt-0.5">
-            Text extracted and available for AI analysis.
-          </div>
-        </div>
+      {document.type === "uploaded" && (
+        <OcrStatusNote document={document} isAdmin={isAdmin} />
       )}
 
       <div className="mt-4 grid gap-2">
@@ -413,7 +465,7 @@ function HistoryTab({ documentId }: { documentId: string }) {
   );
 }
 
-export function DocDetailsPanel({ document }: DocDetailsPanelProps) {
+export function DocDetailsPanel({ document, isAdmin }: DocDetailsPanelProps) {
   const [tab, setTab] = useState<Tab>("details");
 
   const tabs: { id: Tab; label: string }[] = [
@@ -443,7 +495,7 @@ export function DocDetailsPanel({ document }: DocDetailsPanelProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4">
-        {tab === "details" && <DetailsTab document={document} />}
+        {tab === "details" && <DetailsTab document={document} isAdmin={isAdmin} />}
         {tab === "comments" && <CommentsTab documentId={document.id} />}
         {tab === "history" && <HistoryTab documentId={document.id} />}
       </div>

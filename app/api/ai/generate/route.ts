@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { runDocumentGeneration, type DocumentType, STAGE_MAP } from "@/lib/document-generation";
 import { checkStagePaid } from "@/lib/billing/guard";
+import { friendlyAiError } from "@/lib/ai-errors";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -49,8 +50,10 @@ export async function POST(req: Request) {
     .single();
 
   if (doc?.generation_status === "failed") {
+    // Map the raw provider error to friendly copy — the raw text (which can
+    // include billing/credit details) stays in the DB for staff only.
     return NextResponse.json(
-      { error: doc.generation_error || "Generation failed" },
+      { error: friendlyAiError(doc.generation_error) },
       { status: 500 }
     );
   }

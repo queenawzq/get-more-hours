@@ -14,6 +14,7 @@ import {
   RotateCw,
 } from "lucide-react";
 import { toast } from "sonner";
+import { describeAiError } from "@/lib/ai-errors";
 import type { Document } from "@/types";
 
 interface DocViewerProps {
@@ -125,6 +126,7 @@ export function DocViewer({
 
   const derived = deriveStatus(doc);
   const polling = isNonTerminal(doc);
+  const errInfo = describeAiError(doc.generation_error);
 
   const handleContentSaved = (newContent: string) => {
     setDoc({ ...doc, content: newContent, version: doc.version + 1 });
@@ -276,15 +278,12 @@ export function DocViewer({
       <div className="flex-1 flex overflow-hidden">
         {derived === "failed" ? (
           <div className="flex-1 flex items-center justify-center p-10">
-            <div className="max-w-md w-full bg-white border border-red-200 rounded-xl p-6 shadow-sm">
-              <div className="flex items-center gap-2 mb-3 text-red-600">
+            <div className="max-w-md w-full bg-white border border-amber-200 rounded-xl p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-2 text-amber-700">
                 <AlertCircle className="h-5 w-5" />
-                <h3 className="text-base font-semibold">Generation failed</h3>
+                <h3 className="text-base font-semibold">{errInfo.title}</h3>
               </div>
-              <p className="text-sm text-gray-600 mb-4 whitespace-pre-wrap">
-                {doc.generation_error ||
-                  "Something went wrong while generating this document."}
-              </p>
+              <p className="text-sm text-gray-600 mb-4">{errInfo.message}</p>
               <Button
                 onClick={handleRetry}
                 disabled={retrying || !documentType}
@@ -295,11 +294,17 @@ export function DocViewer({
                 ) : (
                   <RotateCw className="h-3.5 w-3.5" />
                 )}
-                Retry generation
+                Try again
               </Button>
               {!documentType && (
                 <p className="text-xs text-gray-400 mt-2">
-                  Unknown document type — cannot retry automatically.
+                  This document can&apos;t be retried automatically — please
+                  contact support.
+                </p>
+              )}
+              {isAdmin && doc.generation_error && (
+                <p className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-400 break-words">
+                  Staff detail: {doc.generation_error}
                 </p>
               )}
             </div>
